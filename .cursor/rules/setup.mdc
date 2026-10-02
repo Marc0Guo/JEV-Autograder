@@ -1,0 +1,15 @@
+---
+description: Install JEV Autograder with one command before using or changing it
+alwaysApply: true
+---
+
+# Setup
+
+Follow `CURSOR.md`. From the repository root, configure with one command:
+
+- Windows: `powershell -ExecutionPolicy Bypass -File .\install.ps1`
+- macOS and Linux: `bash install.sh`
+
+`uv sync` installs MarkItDown and SemIf (`semif-phase1` from SemIf-OpenJev). Start the app with `uv run autograde` and open http://127.0.0.1:8010.
+
+Do not post grades, create Canvas tokens, or download the Qwen model unless the user asks. `data/` is gitignored and may contain a Canvas token.

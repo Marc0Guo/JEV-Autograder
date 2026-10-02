@@ -1,0 +1,36 @@
+[project]
+name = "autograde"
+version = "0.1.0"
+description = "Grade Canvas and Gradescope submissions on your machine with SemIf and MarkItDown."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.12"
+keywords = ["canvas", "gradescope", "grading", "semif", "markitdown"]
+authors = [{ name = "Marc0Guo" }]
+dependencies = [
+    "beautifulsoup4>=4.12",
+    "fastapi>=0.115",
+    "httpx>=0.27",
+    "markitdown[pdf,docx,pptx,xlsx,xls]>=0.1.8",
+    "pydantic>=2",
+    "semif-phase1",
+    "uvicorn>=0.32",
+]
+
+[project.urls]
+Homepage = "https://github.com/Marc0Guo/JEV-Autograder"
+SemIf = "https://github.com/TheoLeeCJ/SemIf-OpenJev"
+MarkItDown = "https://github.com/microsoft/markitdown"
+
+[project.scripts]
+autograde = "autograde.app:main"
+
+[tool.uv.sources]
+semif-phase1 = { git = "https://github.com/TheoLeeCJ/SemIf-OpenJev.git", rev = "23cf1f39fc9534fe81437200959b6dfc7106e45a" }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["autograde"]

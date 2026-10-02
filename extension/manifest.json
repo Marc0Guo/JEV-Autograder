@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "JEV Review",
+  "version": "0.1.4",
+  "description": "Accept or override JEV grades on the Canvas SpeedGrader.",
+  "host_permissions": ["http://127.0.0.1:8010/*"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "JEV Review"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*/courses/*/gradebook/speed_grader*"],
+      "js": ["panel.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

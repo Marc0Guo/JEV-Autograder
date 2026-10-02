@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>JEV Autograder</title>
+  <style>
+    :root {
+      --ink: #1c1915;
+      --muted: #5c564c;
+      --line: #d9d1c5;
+      --paper: #f6f1e8;
+      --card: #fffdf8;
+      --accent: #9a3412;
+      --ok: #1f6b45;
+      --warn: #92400e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font: 16px/1.45 "Segoe UI", sans-serif;
+    }
+    header, main { width: min(1080px, calc(100% - 32px)); margin: 0 auto; }
+    header { padding: 28px 0 8px; display: flex; justify-content: space-between; gap: 16px; align-items: end; }
+    h1 { font-family: Georgia, serif; font-weight: 500; font-size: 34px; margin: 0; }
+    h2 { font-family: Georgia, serif; font-weight: 500; font-size: 22px; margin: 0 0 12px; }
+    p.lead { margin: 6px 0 0; color: var(--muted); max-width: 62ch; }
+    .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+    .chip { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 4px 10px; font-size: 13px; }
+    .chip.ok { color: var(--ok); }
+    .chip.bad { color: var(--accent); }
+    section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; margin: 14px 0; }
+    label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+    input, textarea, select {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font: inherit;
+    }
+    textarea { min-height: 110px; resize: vertical; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+    button {
+      background: var(--ink);
+      color: #fff;
+      border: 0;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font: inherit;
+      cursor: pointer;
+    }
+    button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+    button:disabled { opacity: 0.5; cursor: wait; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    .note { color: var(--muted); font-size: 14px; }
+    tr.selected td { background: #f3eee4; }
+    #selected-course { font-weight: 600; color: var(--ink); }
+    .criterion { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-top: 12px; background: #fff; }
+    .criterion h3 { margin: 0; font-size: 16px; font-weight: 600; }
+    .criterion-head { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+    .level-row { display: grid; grid-template-columns: 1.1fr 90px 1.6fr auto; gap: 8px; margin-top: 8px; align-items: center; }
+    textarea.short { min-height: 72px; }
+    button.small { padding: 6px 10px; }
+    pre { white-space: pre-wrap; background: #f3eee4; padding: 10px; border-radius: 8px; }
+    .error { color: var(--accent); }
+    .split { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 14px; align-items: start; }
+    .work { white-space: pre-wrap; background: #f3eee4; padding: 12px; border-radius: 8px; max-height: 68vh; overflow: auto; margin: 0; }
+    .scoreline { font-family: Georgia, serif; font-size: 28px; margin: 0; }
+    .ratings { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+    button.rating { width: 100%; text-align: left; background: #fff; color: var(--ink); border: 1px solid var(--line); }
+    button.rating.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+    .warn-flag { color: var(--warn); }
+    #desk-criteria .criterion { margin-top: 10px; }
+    @media (max-width: 800px) {
+      .grid, .split { grid-template-columns: 1fr; }
+      header { flex-direction: column; align-items: start; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>JEV Autograder</h1>
+      <p class="lead">Set the rubric once. Then review each student with their work beside JEV’s ratings, and click Accept or a different rating.</p>
+    </div>
+    <div class="chips" id="chips"></div>
+  </header>
+  <main>
+    <section>
+      <h2>Connections</h2>
+      <div class="grid">
+        <div>
+          <label>JEV server</label>
+          <input id="jev" value="http://127.0.0.1:8000" />
+          <label>Canvas URL</label>
+          <input id="canvas-base" placeholder="https://school.instructure.com" />
+          <label>Canvas API token</label>
+          <input id="canvas-token" type="password" placeholder="Leave blank to keep a saved token" />
+        </div>
+        <div>
+          <label>Gradescope URL</label>
+          <input id="gs-base" value="https://www.gradescope.com" />
+          <label>Gradescope email</label>
+          <input id="gs-email" autocomplete="username" />
+          <label>Gradescope password</label>
+          <input id="gs-password" type="password" autocomplete="current-password" />
+        </div>
+      </div>
+      <div class="row">
+        <button id="connect">Save and connect</button>
+        <span class="note" id="connect-note">The password is used to open a session and is not saved. The Canvas token is stored in autograde/data/config.json on this computer.</span>
+      </div>
+    </section>
+
+    <section>
+      <h2>Course</h2>
+      <p class="note" id="dash-account">Loading the connected account…</p>
+      <table>
+        <thead>
+          <tr><th>Course you teach</th><th>Term</th><th>State</th><th></th></tr>
+        </thead>
+        <tbody id="dash-courses"></tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Assignment</h2>
+      <p id="selected-course">No course selected.</p>
+      <div class="grid">
+        <div>
+          <label>Source</label>
+          <select id="source">
+            <option value="canvas">Canvas</option>
+            <option value="gradescope">Gradescope</option>
+          </select>
+          <label>Course</label>
+          <select id="course"></select>
+        </div>
+        <div>
+          <label>Assignment</label>
+          <select id="assignment"></select>
+          <label>Assignment prompt sent to JEV with each submission</label>
+          <textarea id="prompt" placeholder="What the student was asked to do"></textarea>
+        </div>
+      </div>
+      <div class="row">
+        <button id="load-courses" class="ghost">Load courses</button>
+        <button id="load-subs" class="ghost">Load submissions</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Rubric</h2>
+      <p class="note" id="rubric-source">Pick a Canvas assignment to load its rubric. You can still add or edit criteria by hand.</p>
+      <div class="grid">
+        <div>
+          <label>Assignment points</label>
+          <input id="assignment-points" type="number" value="10" min="0" step="0.5" />
+        </div>
+        <div>
+          <label>Review if confidence is below</label>
+          <input id="min-confidence" type="number" value="0.35" min="0" max="1" step="0.05" />
+        </div>
+        <div>
+          <label>Award checklist points when yes is at least</label>
+          <input id="noul-threshold" type="number" value="0.8" min="0" max="1" step="0.05" />
+        </div>
+      </div>
+      <div id="criteria"></div>
+      <div class="row">
+        <button id="add-score" type="button">Add score criterion</button>
+        <button id="add-choice" class="ghost" type="button">Add choice criterion</button>
+        <button id="add-noul" class="ghost" type="button">Add yes/no criterion</button>
+        <button id="clear-criteria" class="ghost" type="button">Clear rubric</button>
+      </div>
+    </section>
+
+    <section id="desk">
+      <h2>Review</h2>
+      <p class="note">Start review after the rubric looks right. Each student opens with their submission on the left and JEV’s ratings on the right. Accept posts the highlighted ratings. Click another rating first when you want to override, then post. The same rubric is what the Canvas SpeedGrader extension uses.</p>
+      <div class="row">
+        <button id="start-review" type="button">Start review</button>
+        <button id="preview-review" class="ghost" type="button">Preview the sample</button>
+        <span class="note" id="desk-progress"></span>
+      </div>
+      <p class="error" id="desk-error"></p>
+      <div class="split" id="desk-body" hidden>
+        <div>
+          <h3 id="desk-name" style="margin:0 0 8px;font-size:18px;"></h3>
+          <pre class="work" id="desk-text"></pre>
+        </div>
+        <div>
+          <p class="scoreline" id="desk-score"></p>
+          <p class="note" id="desk-hint"></p>
+          <div id="desk-criteria"></div>
+          <div class="row">
+            <button id="accept-review" type="button">Accept</button>
+            <button id="skip-review" class="ghost" type="button">Skip</button>
+            <button id="back-review" class="ghost" type="button">Previous</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Submissions</h2>
+      <table>
+        <thead>
+          <tr><th>Student</th><th>Current</th><th>JEV</th><th></th></tr>
+        </thead>
+        <tbody id="subs"></tbody>
+      </table>
+      <div class="row">
+        <button id="grade-all">Grade loaded submissions</button>
+        <button id="csv" class="ghost">Download Gradescope CSV</button>
+      </div>
+      <p class="error" id="work-error"></p>
+    </section>
+
+    <section>
+      <h2>Try one answer</h2>
+      <label>Submission text</label>
+      <textarea id="sample">The customer ordered size 10 shoes and received size 8. They want the correct pair sent today and do not want a refund. The message is polite and specific.</textarea>
+      <div class="row">
+        <button id="grade-sample">Grade this text</button>
+      </div>
+      <pre id="sample-out">No grade yet.</pre>
+    </section>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const grades = new Map();
+    let submissions = [];
+    let queue = [];
+    let cursor = 0;
+    let desk = null;
+    let picks = {};
+
+    function defaultCriteria() {
+      return [
+        {
+          id: "accuracy",
+          kind: "score",
+          instructions: "How completely does the submission answer the prompt?",
+          levels: [
+            { label: "Missing", points: 0, description: "Does not answer the prompt" },
+            { label: "Partial", points: 3, description: "Answers only part of the prompt" },
+            { label: "Complete", points: 6, description: "Answers the prompt with the relevant facts" }
+          ]
+        },
+        {
+          id: "tone",
+          kind: "choice",
+          instructions: "What is the tone of the submission?",
+          options: [
+            { name: "clear", points: 4, description: "Specific, polite, and easy to act on" },
+            { name: "unclear", points: 1, description: "Vague, hostile, or missing the request" }
+          ]
+        }
+      ];
+    }
+
+    function blankCriterion(kind) {
+      const count = $("criteria").querySelectorAll(".criterion").length + 1;
+      if (kind === "choice") {
+        return {
+          id: "choice_" + count,
+          kind: "choice",
+          instructions: "",
+          options: [
+            { name: "", points: 0, description: "" },
+            { name: "", points: 1, description: "" }
+          ]
+        };
+      }
+      if (kind === "noul") {
+        return {
+          id: "yes_no_" + count,
+          kind: "noul",
+          instructions: "",
+          points_if_yes: 1,
+          points_if_no: 0,
+          yes_description: "",
+          no_description: ""
+        };
+      }
+      return {
+        id: "criterion_" + count,
+        kind: "score",
+        instructions: "",
+        levels: [
+          { label: "", points: 0, description: "" },
+          { label: "", points: 1, description: "" }
+        ]
+      };
+    }
+
+    function renderCriteria(items) {
+      $("criteria").innerHTML = "";
+      if (!items.length) {
+        $("criteria").innerHTML = `<p class="note">No criteria yet. Add a score, choice, or yes/no criterion.</p>`;
+        return;
+      }
+      items.forEach((item, index) => {
+        const box = document.createElement("div");
+        box.className = "criterion";
+        box.innerHTML = `
+          <div class="criterion-head">
+            <h3>Criterion ${index + 1}</h3>
+            <button type="button" class="ghost small" data-remove-criterion>Remove</button>
+          </div>
+          <div class="grid">
+            <div>
+              <label>Name</label><input data-field="id" value="${escapeAttr(item.id)}" />
+              <label>Type</label>
+              <select data-field="kind">
+                <option value="score" ${item.kind === "score" ? "selected" : ""}>Score levels</option>
+                <option value="choice" ${item.kind === "choice" ? "selected" : ""}>Choice</option>
+                <option value="noul" ${item.kind === "noul" ? "selected" : ""}>Yes / no</option>
+              </select>
+            </div>
+            <div>
+              <label>What should JEV judge?</label>
+              <textarea class="short" data-field="instructions" placeholder="Describe what earns points">${escapeText(item.instructions)}</textarea>
+            </div>
+          </div>
+          <div data-panel="score" ${item.kind === "score" ? "" : "hidden"}>
+            <label>Levels, from low to high</label>
+            <div data-rows="levels"></div>
+            <div class="row"><button type="button" class="ghost small" data-add-row="levels">Add level</button></div>
+          </div>
+          <div data-panel="choice" ${item.kind === "choice" ? "" : "hidden"}>
+            <label>Options</label>
+            <div data-rows="options"></div>
+            <div class="row"><button type="button" class="ghost small" data-add-row="options">Add option</button></div>
+          </div>
+          <div data-panel="noul" ${item.kind === "noul" ? "" : "hidden"}>
+            <div class="grid">
+              <div>
+                <label>Points if yes</label>
+                <input data-field="points_if_yes" type="number" step="0.5" value="${item.points_if_yes ?? 1}" />
+                <label>What yes means</label>
+                <input data-field="yes_description" value="${escapeAttr(item.yes_description || "")}" placeholder="The submission meets this requirement" />
+              </div>
+              <div>
+                <label>Points if no</label>
+                <input data-field="points_if_no" type="number" step="0.5" value="${item.points_if_no ?? 0}" />
+                <label>What no means</label>
+                <input data-field="no_description" value="${escapeAttr(item.no_description || "")}" placeholder="The submission does not meet this requirement" />
+              </div>
+            </div>
+          </div>`;
+        const levelHost = box.querySelector('[data-rows="levels"]');
+        const optionHost = box.querySelector('[data-rows="options"]');
+        (item.levels || []).forEach((level) => levelHost.appendChild(levelRow(level.label, level.points, level.description, "Level")));
+        (item.options || []).forEach((option) => optionHost.appendChild(levelRow(option.name, option.points, option.description, "Option")));
+        box.querySelector("[data-remove-criterion]").onclick = () => {
+          const next = rubric().criteria.filter((_, itemIndex) => itemIndex !== index);
+          renderCriteria(next);
+        };
+        box.querySelector('[data-field="kind"]').onchange = (event) => {
+          const current = readCriterion(box);
+          const replacement = blankCriterion(event.target.value);
+          replacement.id = current.id;
+          replacement.instructions = current.instructions;
+          const next = rubric().criteria;
+          next[index] = replacement;
+          renderCriteria(next);
+        };
+        box.querySelectorAll("[data-add-row]").forEach((button) => {
+          button.onclick = () => {
+            const host = box.querySelector(`[data-rows="${button.dataset.addRow}"]`);
+            host.appendChild(levelRow("", 0, "", button.dataset.addRow === "levels" ? "Level" : "Option"));
+          };
+        });
+        $("criteria").appendChild(box);
+      });
+    }
+
+    function levelRow(name, points, description, placeholder) {
+      const row = document.createElement("div");
+      row.className = "level-row";
+      row.innerHTML = `
+        <input data-part="name" placeholder="${placeholder}" value="${escapeAttr(name)}" />
+        <input data-part="points" type="number" step="0.5" value="${Number(points) || 0}" />
+        <input data-part="description" placeholder="What this means" value="${escapeAttr(description)}" />
+        <button type="button" class="ghost small" data-remove-row>Remove</button>`;
+      row.querySelector("[data-remove-row]").onclick = () => row.remove();
+      return row;
+    }
+
+    function readRows(box, kind) {
+      return [...box.querySelectorAll(`[data-rows="${kind}"] .level-row`)].map((row) => ({
+        name: row.querySelector('[data-part="name"]').value.trim(),
+        points: Number(row.querySelector('[data-part="points"]').value || 0),
+        description: row.querySelector('[data-part="description"]').value.trim()
+      })).filter((row) => row.name);
+    }
+
+    function readCriterion(box) {
+      const field = (name) => box.querySelector(`[data-field="${name}"]`)?.value ?? "";
+      const kind = field("kind");
+      const item = {
+        id: field("id").trim(),
+        kind,
+        instructions: field("instructions").trim(),
+        points_if_yes: Number(field("points_if_yes") || 0),
+        points_if_no: Number(field("points_if_no") || 0),
+        yes_description: field("yes_description").trim(),
+        no_description: field("no_description").trim(),
+        levels: [],
+        options: []
+      };
+      if (kind === "score") {
+        item.levels = readRows(box, "levels").map((row) => ({ label: row.name, points: row.points, description: row.description }));
+      }
+      if (kind === "choice") {
+        item.options = readRows(box, "options").map((row) => ({ name: row.name, points: row.points, description: row.description }));
+      }
+      return item;
+    }
+
+    function escapeAttr(value) {
+      return String(value).replace(/"/g, "&quot;");
+    }
+    function escapeText(value) {
+      return String(value ?? "").replace(/[&<>]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[ch]));
+    }
+
+    function rubric() {
+      const criteria = [...$("criteria").querySelectorAll(".criterion")].map(readCriterion);
+      const points = $("assignment-points").value;
+      return {
+        name: "Rubric",
+        prompt: $("prompt").value,
+        assignment_points: points === "" ? null : Number(points),
+        min_confidence: Number($("min-confidence").value || 0),
+        noul_threshold: Number($("noul-threshold").value || 0.8),
+        criteria
+      };
+    }
+
+    async function api(path, options) {
+      const response = await fetch(path, options);
+      const text = await response.text();
+      let body = null;
+      try { body = text ? JSON.parse(text) : null; } catch { body = { detail: text }; }
+      if (!response.ok) {
+        const detail = body && (body.detail || body.message) || response.statusText;
+        throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+      }
+      return body;
+    }
+
+    function paintStatus(data) {
+      const chip = (ok, label) => `<span class="chip ${ok ? "ok" : "bad"}">${label}</span>`;
+      $("chips").innerHTML = [
+        chip(data.jev.ok, data.jev.ok ? `JEV ${data.jev.detail}` : "JEV offline"),
+        chip(data.canvas.connected, data.canvas.connected ? "Canvas connected" : "Canvas not connected"),
+        chip(data.gradescope.connected, data.gradescope.connected ? `Gradescope ${data.gradescope.email}` : "Gradescope not connected")
+      ].join("");
+      if (data.canvas.base) $("canvas-base").value = data.canvas.base;
+      if (data.gradescope.base) $("gs-base").value = data.gradescope.base;
+      if (data.jev.ok) $("jev").value = $("jev").value || "http://127.0.0.1:8000";
+    }
+
+    let teaching = [];
+    let selectedCourseId = "";
+
+    function currentTerm(date = new Date()) {
+      const month = date.getMonth() + 1;
+      const year = date.getFullYear();
+      const short = String(year).slice(2);
+      if (month >= 9) return { label: `Autumn ${year}`, code: `Au ${short}` };
+      if (month <= 3) return { label: `Winter ${year}`, code: `Wi ${short}` };
+      if (month <= 6) return { label: `Spring ${year}`, code: `Sp ${short}` };
+      return { label: `Summer ${year}`, code: `Su ${short}` };
+    }
+
+    function courseRank(course, term) {
+      const name = String(course.name || "");
+      const archived = name.startsWith("ARCHIVED") || course.workflow_state === "completed";
+      const termName = String(course.term || "");
+      const inTerm = termName.toLowerCase().includes(term.label.toLowerCase()) || name.includes(term.code);
+      if (inTerm && !archived) return 0;
+      if (!archived && course.workflow_state === "available") return 1;
+      return 2;
+    }
+
+    function showSelectedCourse() {
+      const course = teaching.find((item) => item.id === selectedCourseId);
+      document.querySelectorAll("#dash-courses tr").forEach((row) => {
+        row.classList.toggle("selected", row.dataset.id === selectedCourseId);
+      });
+      $("selected-course").textContent = course
+        ? `Current course: ${course.name}${course.term ? " · " + course.term : ""}`
+        : "No course selected.";
+    }
+
+    function renderDashboard(data) {
+      paintStatus(data);
+      const canvas = data.canvas || {};
+      const term = currentTerm();
+      teaching = (canvas.teaching || []).slice().sort((a, b) => courseRank(a, term) - courseRank(b, term) || String(a.name).localeCompare(String(b.name)));
+      const thisTerm = teaching.filter((course) => courseRank(course, term) === 0);
+      if (!canvas.connected) {
+        $("dash-account").textContent = "Connect a Canvas token to list the courses you teach.";
+      } else if (canvas.error) {
+        $("dash-account").textContent = canvas.error;
+      } else {
+        $("dash-account").textContent = `${canvas.account || "Canvas"} · ${term.label} first · ${thisTerm.length} this term`;
+      }
+      const body = $("dash-courses");
+      body.innerHTML = "";
+      if (!teaching.length) {
+        body.innerHTML = `<tr><td colspan="4" class="note">No teacher courses yet.</td></tr>`;
+        showSelectedCourse();
+        return;
+      }
+      teaching.forEach((course) => {
+        const tr = document.createElement("tr");
+        tr.dataset.id = course.id;
+        tr.innerHTML = `<td>${escapeText(course.name)}</td><td>${escapeText(course.term || "")}</td><td>${escapeText(course.workflow_state || "")}</td><td></td>`;
+        const open = document.createElement("button");
+        open.className = "ghost";
+        open.textContent = course.id === selectedCourseId ? "Selected" : "Grade";
+        open.onclick = () => openCourse(course);
+        tr.lastElementChild.appendChild(open);
+        body.appendChild(tr);
+      });
+      showSelectedCourse();
+    }
+
+    async function openCourse(course) {
+      selectedCourseId = course.id;
+      showSelectedCourse();
+      $("source").value = "canvas";
+      fillSelect($("course"), teaching, "Choose a course");
+      $("course").value = course.id;
+      await loadAssignments(course.id);
+      document.querySelectorAll("#dash-courses tr").forEach((row) => {
+        const button = row.querySelector("button");
+        if (button) button.textContent = row.dataset.id === selectedCourseId ? "Selected" : "Grade";
+      });
+      showSelectedCourse();
+      $("selected-course").scrollIntoView({ block: "nearest" });
+      $("assignment").focus();
+    }
+
+    async function refreshStatus() {
+      renderDashboard(await api("/api/dashboard"));
+    }
+
+    function fillSelect(select, rows, placeholder) {
+      select.innerHTML = "";
+      const blank = document.createElement("option");
+      blank.value = "";
+      blank.textContent = placeholder;
+      select.appendChild(blank);
+      rows.forEach((row) => {
+        const option = document.createElement("option");
+        option.value = row.id;
+        option.textContent = row.code ? `${row.name} — ${row.code}` : row.name;
+        option.dataset.points = row.points ?? "";
+        option.dataset.description = row.description || "";
+        select.appendChild(option);
+      });
+    }
+
+    function renderSubs() {
+      const body = $("subs");
+      body.innerHTML = "";
+      if (!submissions.length) {
+        body.innerHTML = `<tr><td colspan="4" class="note">No submissions loaded.</td></tr>`;
+        return;
+      }
+      submissions.forEach((row) => {
+        const grade = grades.get(row.id);
+        const tr = document.createElement("tr");
+        const score = grade ? `${grade.scaled_points} / ${$("assignment-points").value}${grade.needs_review ? " review" : ""}` : "";
+        tr.innerHTML = `
+          <td>${escapeText(row.name)}<div class="note">${escapeText(row.email || "")}</div></td>
+          <td>${escapeText(row.posted_grade || "")}</td>
+          <td>${escapeText(score)}<div class="note">${grade ? escapeText((grade.comment.split("\n")[1] || "")) : ""}</div></td>
+          <td></td>`;
+        const cell = tr.lastElementChild;
+        const gradeBtn = document.createElement("button");
+        gradeBtn.textContent = "Grade";
+        gradeBtn.onclick = () => gradeOne(row, gradeBtn);
+        cell.appendChild(gradeBtn);
+        if ($("source").value === "canvas" && grade) {
+          const post = document.createElement("button");
+          post.className = "ghost";
+          post.textContent = "Post";
+          post.onclick = () => postOne(row, post);
+          cell.appendChild(post);
+        }
+        body.appendChild(tr);
+      });
+    }
+
+    async function gradeOne(row, button) {
+      $("work-error").textContent = "";
+      button.disabled = true;
+      try {
+        const result = await api("/api/grade-one", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            source: $("source").value,
+            course_id: $("course").value,
+            assignment_id: $("assignment").value,
+            assignment_name: $("assignment").selectedOptions[0]?.textContent || "",
+            submission_id: row.id,
+            rubric: rubric()
+          })
+        });
+        grades.set(row.id, { ...result, name: row.name, email: row.email });
+        renderSubs();
+      } catch (error) {
+        $("work-error").textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    async function postOne(row, button) {
+      const grade = grades.get(row.id);
+      if (!grade) return;
+      button.disabled = true;
+      try {
+        await api("/api/post-canvas", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            course_id: $("course").value,
+            assignment_id: $("assignment").value,
+            student_id: row.student_id,
+            score: grade.scaled_points,
+            comment: grade.comment
+          })
+        });
+        row.posted_grade = String(grade.scaled_points);
+        renderSubs();
+      } catch (error) {
+        $("work-error").textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    $("connect").onclick = async () => {
+      $("connect").disabled = true;
+      $("connect-note").textContent = "Connecting…";
+      try {
+        const data = await api("/api/connect", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            jev_base: $("jev").value,
+            canvas_base: $("canvas-base").value,
+            canvas_token: $("canvas-token").value,
+            gradescope_base: $("gs-base").value,
+            gradescope_email: $("gs-email").value,
+            gradescope_password: $("gs-password").value
+          })
+        });
+        $("canvas-token").value = "";
+        $("gs-password").value = "";
+        $("connect-note").textContent = "Saved.";
+        await refreshStatus();
+      } catch (error) {
+        $("connect-note").textContent = error.message;
+      } finally {
+        $("connect").disabled = false;
+      }
+    };
+
+    $("load-courses").onclick = async () => {
+      $("work-error").textContent = "";
+      const data = await api("/api/courses?source=" + $("source").value).catch((error) => {
+        $("work-error").textContent = error.message;
+        return null;
+      });
+      if (data) fillSelect($("course"), data.courses, "Choose a course");
+    };
+
+    let assignmentLoad = 0;
+    let rubricLoad = 0;
+
+    async function loadAssignments(courseId) {
+      const token = ++assignmentLoad;
+      $("assignment").dataset.courseId = courseId || "";
+      fillSelect($("assignment"), [], courseId ? "Loading assignments…" : "Choose an assignment");
+      if (!courseId) return;
+      const data = await api(`/api/assignments?source=${$("source").value}&course_id=${encodeURIComponent(courseId)}`);
+      if (token !== assignmentLoad) return;
+      fillSelect($("assignment"), data.assignments, "Choose an assignment");
+      $("assignment").dataset.courseId = courseId;
+    }
+
+    $("course").onchange = () => {
+      loadAssignments($("course").value).catch((error) => {
+        $("work-error").textContent = error.message;
+      });
+    };
+
+    $("assignment").onchange = async () => {
+      const selected = $("assignment").selectedOptions[0];
+      const courseId = $("assignment").dataset.courseId || $("course").value;
+      submissions = [];
+      grades.clear();
+      queue = [];
+      desk = null;
+      renderSubs();
+      renderDesk();
+      if (!selected || !selected.value) return;
+      if (selected.dataset.points) $("assignment-points").value = selected.dataset.points;
+      if (selected.dataset.description && !$("prompt").value) $("prompt").value = selected.dataset.description;
+      if ($("source").value !== "canvas") return;
+      if (!courseId) {
+        $("rubric-source").textContent = "Choose a course before loading its rubric.";
+        return;
+      }
+      const token = ++rubricLoad;
+      const assignmentId = selected.value;
+      $("rubric-source").textContent = "Splitting rubric lines into checklist checks…";
+      try {
+        const rubric = await api(`/api/canvas-rubric?course_id=${encodeURIComponent(courseId)}&assignment_id=${encodeURIComponent(assignmentId)}`);
+        if (token !== rubricLoad) return;
+        if (!rubric.found) {
+          $("rubric-source").textContent = "This assignment has no Canvas rubric. Add criteria by hand.";
+          return;
+        }
+        renderCriteria(rubric.criteria);
+        if (rubric.points != null) $("assignment-points").value = rubric.points;
+        if (rubric.description && !$("prompt").value) $("prompt").value = rubric.description;
+        const counts = { score: 0, choice: 0, noul: 0 };
+        rubric.criteria.forEach((item) => { counts[item.kind] = (counts[item.kind] || 0) + 1; });
+        const parts = [];
+        if (counts.noul) parts.push(`${counts.noul} checklist`);
+        if (counts.score) parts.push(`${counts.score} score`);
+        if (counts.choice) parts.push(`${counts.choice} choice`);
+        const total = rubric.criteria.reduce((sum, item) => {
+          if (item.kind === "noul") return sum + Math.max(Number(item.points_if_yes) || 0, Number(item.points_if_no) || 0);
+          const rows = item.kind === "choice" ? item.options : item.levels;
+          return sum + Math.max(...(rows || []).map((row) => Number(row.points) || 0), 0);
+        }, 0);
+        const cutoff = Math.round(Number($("noul-threshold").value || 0.8) * 100);
+        const via = rubric.matched_by === "checklist"
+          ? `Each check earns its points when yes is at least ${cutoff}%`
+          : rubric.matched_by === "jev"
+            ? "JEV chose the output mode"
+            : "Full marks / no marks became checklist checks";
+        $("rubric-source").textContent = `${rubric.name}: ${parts.join(", ")}, ${total} points. ${via}.`;
+      } catch (error) {
+        if (token !== rubricLoad) return;
+        $("rubric-source").textContent = error.message.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 240);
+      }
+    };
+
+    $("load-subs").onclick = async () => {
+      $("work-error").textContent = "";
+      if (!$("course").value || !$("assignment").value) {
+        $("work-error").textContent = "Choose a course and an assignment first.";
+        return;
+      }
+      grades.clear();
+      const data = await api(`/api/submissions?source=${$("source").value}&course_id=${$("course").value}&assignment_id=${$("assignment").value}`).catch((error) => {
+        $("work-error").textContent = error.message;
+        return null;
+      });
+      submissions = data ? data.submissions : [];
+      renderSubs();
+    };
+
+    $("grade-all").onclick = async () => {
+      for (const row of submissions) {
+        await gradeOne(row, $("grade-all"));
+      }
+    };
+
+    $("csv").onclick = async () => {
+      const rows = [...grades.values()].map((grade) => ({
+        name: grade.name,
+        email: grade.email,
+        score: grade.scaled_points,
+        comment: grade.comment
+      }));
+      const response = await fetch("/api/gradescope-csv", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ rows })
+      });
+      const blob = await response.blob();
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "gradescope-grades.csv";
+      link.click();
+    };
+
+    function addCriterion(kind) {
+      const items = rubric().criteria;
+      items.push(blankCriterion(kind));
+      renderCriteria(items);
+      const cards = $("criteria").querySelectorAll(".criterion");
+      cards[cards.length - 1]?.scrollIntoView({ block: "nearest" });
+    }
+    $("add-score").onclick = () => addCriterion("score");
+    $("add-choice").onclick = () => addCriterion("choice");
+    $("add-noul").onclick = () => addCriterion("noul");
+    $("clear-criteria").onclick = () => renderCriteria([]);
+
+    $("grade-sample").onclick = async () => {
+      $("grade-sample").disabled = true;
+      $("sample-out").textContent = "Scoring on JEV…";
+      try {
+        const result = await api("/api/grade-text", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            text: $("sample").value,
+            assignment_name: "Sample",
+            rubric: rubric()
+          })
+        });
+        $("sample-out").textContent = `${result.comment}\n\nscaled ${result.scaled_points}  raw ${result.points}/${result.max_points}  review ${result.needs_review}`;
+      } catch (error) {
+        $("sample-out").textContent = error.message;
+      } finally {
+        $("grade-sample").disabled = false;
+      }
+    };
+
+    function picksDiffer(grade) {
+      return grade.criteria.some((item) => picks[item.id] !== item.model_key);
+    }
+
+    function discreteScore(grade, assignmentPoints) {
+      let raw = 0;
+      for (const item of grade.criteria) {
+        const rating = item.ratings.find((row) => row.key === picks[item.id]);
+        raw += rating ? Number(rating.points) : 0;
+      }
+      const max = Number(grade.max_points) || 0;
+      const target = assignmentPoints == null || assignmentPoints === "" ? max : Number(assignmentPoints);
+      const scaled = max ? Math.round((raw / max) * target * 100) / 100 : 0;
+      return { scaled, target };
+    }
+
+    function renderDesk() {
+      if (!desk) {
+        $("desk-body").hidden = true;
+        return;
+      }
+      $("desk-body").hidden = false;
+      const grade = desk.grade;
+      const score = discreteScore(grade, desk.assignmentPoints);
+      const adjusted = picksDiffer(grade);
+      const who = desk.preview ? "sample" : desk.row.id;
+      $("desk-name").textContent = desk.preview
+        ? "Sample answer"
+        : `${desk.row.name}${desk.row.email ? " · " + desk.row.email : ""}`;
+      if ($("desk-text").dataset.who !== who) {
+        $("desk-text").textContent = desk.text || "(no text)";
+        $("desk-text").dataset.who = who;
+      }
+      $("desk-score").textContent = `${score.scaled} / ${score.target}`;
+      const notes = [];
+      if (Math.abs(Number(grade.scaled_points) - score.scaled) > 0.05) {
+        notes.push(`probability-weighted ${grade.scaled_points}`);
+      }
+      if (grade.needs_review) notes.push("low confidence");
+      if (adjusted) notes.push("you changed a rating");
+      $("desk-hint").textContent = notes.join(" · ");
+      const posting = $("source").value === "canvas";
+      $("accept-review").textContent = desk.preview
+        ? "Sample is not posted"
+        : adjusted
+          ? (posting ? "Post my ratings" : "Save my ratings")
+          : (posting ? "Accept" : "Save");
+      $("accept-review").disabled = !!desk.preview;
+      $("skip-review").hidden = !!desk.preview;
+      $("back-review").hidden = !!desk.preview;
+      $("back-review").disabled = cursor <= 0;
+      $("skip-review").disabled = cursor >= queue.length - 1;
+      const host = $("desk-criteria");
+      host.innerHTML = "";
+      const cutoff = Number($("min-confidence").value || 0);
+      grade.criteria.forEach((item) => {
+        const card = document.createElement("div");
+        card.className = "criterion";
+        const low = Number(item.confidence) < cutoff;
+        card.innerHTML = `<h3>${escapeText(item.id)}</h3><p class="note${low ? " warn-flag" : ""}">${escapeText(item.detail)}</p>`;
+        const wrap = document.createElement("div");
+        wrap.className = "ratings";
+        item.ratings.forEach((rating) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "rating" + (picks[item.id] === rating.key ? " on" : "");
+          const mark = rating.key === item.model_key ? "Model · " : "";
+          const pct = Math.round(Number(rating.probability) * 100);
+          button.textContent = `${mark}${rating.label} · ${rating.points} pts · ${pct}%`;
+          button.onclick = () => {
+            picks[item.id] = rating.key;
+            renderDesk();
+          };
+          wrap.appendChild(button);
+        });
+        card.appendChild(wrap);
+        host.appendChild(card);
+      });
+      if (!desk.preview && queue.length) {
+        $("desk-progress").textContent = `Student ${cursor + 1} of ${queue.length}`;
+      }
+    }
+
+    async function openCursor() {
+      const row = queue[cursor];
+      $("desk-error").textContent = "";
+      $("desk-progress").textContent = `Scoring ${row.name}…`;
+      $("accept-review").disabled = true;
+      const review = await api("/api/review", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          source: $("source").value,
+          course_id: $("course").value,
+          assignment_id: $("assignment").value,
+          assignment_name: $("assignment").selectedOptions[0]?.textContent || "",
+          submission_id: row.id,
+          student_id: row.student_id,
+          rubric: rubric()
+        })
+      });
+      desk = {
+        row,
+        text: review.text,
+        grade: review.grade,
+        assignmentPoints: review.assignment_points,
+        preview: false
+      };
+      picks = Object.fromEntries(review.grade.criteria.map((item) => [item.id, item.model_key]));
+      renderDesk();
+    }
+
+    $("start-review").onclick = async () => {
+      $("desk-error").textContent = "";
+      if (!$("course").value || !$("assignment").value) {
+        $("desk-error").textContent = "Choose a course and an assignment first.";
+        return;
+      }
+      if (!rubric().criteria.length) {
+        $("desk-error").textContent = "Add at least one rubric criterion.";
+        return;
+      }
+      $("start-review").disabled = true;
+      try {
+        await api("/api/session", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            source: $("source").value,
+            course_id: $("course").value,
+            assignment_id: $("assignment").value,
+            assignment_name: $("assignment").selectedOptions[0]?.textContent || "",
+            rubric: rubric()
+          })
+        });
+        if (!submissions.length) {
+          const data = await api(`/api/submissions?source=${$("source").value}&course_id=${$("course").value}&assignment_id=${$("assignment").value}`);
+          submissions = data.submissions;
+          renderSubs();
+        }
+        queue = submissions.slice();
+        cursor = 0;
+        if (!queue.length) {
+          $("desk-error").textContent = "This assignment has no submissions.";
+          return;
+        }
+        await openCursor();
+        $("desk").scrollIntoView({ block: "start" });
+      } catch (error) {
+        $("desk-error").textContent = error.message;
+      } finally {
+        $("start-review").disabled = false;
+      }
+    };
+
+    $("preview-review").onclick = async () => {
+      $("desk-error").textContent = "";
+      $("preview-review").disabled = true;
+      $("desk-progress").textContent = "Scoring the sample…";
+      try {
+        const result = await api("/api/grade-text", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            text: $("sample").value,
+            assignment_name: "Sample",
+            rubric: rubric()
+          })
+        });
+        const points = $("assignment-points").value;
+        desk = {
+          row: null,
+          text: $("sample").value,
+          grade: result,
+          assignmentPoints: points === "" ? result.max_points : Number(points),
+          preview: true
+        };
+        picks = Object.fromEntries(result.criteria.map((item) => [item.id, item.model_key]));
+        $("desk-progress").textContent = "Sample preview";
+        renderDesk();
+        $("desk").scrollIntoView({ block: "start" });
+      } catch (error) {
+        $("desk-error").textContent = error.message;
+        $("desk-progress").textContent = "";
+      } finally {
+        $("preview-review").disabled = false;
+      }
+    };
+
+    $("accept-review").onclick = async () => {
+      if (!desk || desk.preview) return;
+      $("accept-review").disabled = true;
+      $("desk-error").textContent = "";
+      const adjusted = picksDiffer(desk.grade);
+      try {
+        const result = await api("/api/commit", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            source: $("source").value,
+            course_id: $("course").value,
+            assignment_id: $("assignment").value,
+            student_id: desk.row.student_id,
+            selections: picks,
+            adjusted,
+            rubric: rubric()
+          })
+        });
+        grades.set(desk.row.id, { ...result.grade, name: desk.row.name, email: desk.row.email });
+        if ($("source").value === "canvas") desk.row.posted_grade = String(result.grade.scaled_points);
+        renderSubs();
+        if (cursor < queue.length - 1) {
+          cursor += 1;
+          await openCursor();
+        } else {
+          $("desk-progress").textContent = "Review finished.";
+          $("accept-review").disabled = true;
+        }
+      } catch (error) {
+        $("desk-error").textContent = error.message;
+        $("accept-review").disabled = false;
+      }
+    };
+
+    $("skip-review").onclick = async () => {
+      if (cursor >= queue.length - 1) return;
+      cursor += 1;
+      try {
+        await openCursor();
+      } catch (error) {
+        $("desk-error").textContent = error.message;
+      }
+    };
+
+    $("back-review").onclick = async () => {
+      if (cursor <= 0) return;
+      cursor -= 1;
+      try {
+        await openCursor();
+      } catch (error) {
+        $("desk-error").textContent = error.message;
+      }
+    };
+
+    renderCriteria(defaultCriteria());
+    renderSubs();
+    refreshStatus();
+  </script>
+</body>
+</html>
