@@ -94,6 +94,41 @@
   <main>
     <section>
       <h2>Connections</h2>
+      <label>Scoring backend</label>
+      <select id="backend">
+        <option value="semif">JEV / SemIf (local Qwen)</option>
+        <option value="laya">Laya (local System One)</option>
+        <option value="llm">LLM API</option>
+      </select>
+      <div id="laya-fields" hidden>
+        <label>Laya checkpoint</label>
+        <input id="laya-model" placeholder="Blank lets the router pick english or multilingual" />
+        <p class="note">Laya scores choice, score, and yes/no questions on this computer. The first grade downloads its checkpoint.</p>
+      </div>
+      <div id="llm-fields" hidden>
+        <div class="grid">
+          <div>
+            <label>Provider</label>
+            <select id="llm-provider">
+              <option value="anthropic">Anthropic</option>
+              <option value="openai">OpenAI</option>
+              <option value="ollama">Ollama</option>
+              <option value="lmstudio">LM Studio</option>
+            </select>
+            <label>Base URL</label>
+            <input id="llm-base" />
+            <label>Timeout seconds</label>
+            <input id="llm-timeout" type="number" min="1" step="1" value="60" />
+          </div>
+          <div>
+            <label>Model</label>
+            <input id="llm-model" />
+            <label>API key</label>
+            <input id="llm-key" type="password" autocomplete="off" placeholder="Leave blank to keep a saved key" />
+          </div>
+        </div>
+        <p class="note" id="llm-note"></p>
+      </div>
       <div class="grid">
         <div>
           <label>JEV server</label>
@@ -236,6 +271,28 @@
   <script>
     const $ = (id) => document.getElementById(id);
     const grades = new Map();
+    const LLM_PRESETS = {
+      anthropic: {
+        base: "https://api.anthropic.com",
+        model: "claude-sonnet-4-5",
+        note: "Anthropic Messages API. The key is stored in data/config.json on this computer and is not written to git."
+      },
+      openai: {
+        base: "https://api.openai.com/v1",
+        model: "gpt-4o-mini",
+        note: "OpenAI Chat Completions. The key is stored in data/config.json on this computer and is not written to git."
+      },
+      ollama: {
+        base: "http://127.0.0.1:11434/v1",
+        model: "llama3.2",
+        note: "Ollama uses the OpenAI chat format. A key is optional. Submission text is sent to this base URL."
+      },
+      lmstudio: {
+        base: "http://127.0.0.1:1234/v1",
+        model: "local-model",
+        note: "LM Studio uses the OpenAI chat format. Put the model id from LM Studio’s server tab. A key is optional."
+      }
+    };
     let submissions = [];
     let queue = [];
     let cursor = 0;
@@ -458,16 +515,49 @@
       return body;
     }
 
+    function showBackendFields() {
+      const backend = $("backend").value;
+      $("laya-fields").hidden = backend !== "laya";
+      $("llm-fields").hidden = backend !== "llm";
+    }
+
+    function applyLlmNote() {
+      const preset = LLM_PRESETS[$("llm-provider").value];
+      $("llm-note").textContent = preset ? preset.note : "";
+    }
+
     function paintStatus(data) {
       const chip = (ok, label) => `<span class="chip ${ok ? "ok" : "bad"}">${label}</span>`;
+      const scoring = data.scoring || { backend: "semif" };
+      let scoringLabel = "Scoring: SemIf";
+      let scoringOk = true;
+      if (scoring.backend === "laya") {
+        scoringLabel = scoring.laya_importable ? "Scoring: Laya" : "Laya not installed";
+        scoringOk = !!scoring.laya_importable;
+      } else if (scoring.backend === "llm") {
+        const local = scoring.llm_provider === "ollama" || scoring.llm_provider === "lmstudio";
+        scoringOk = local || scoring.llm_key_source !== "missing";
+        scoringLabel = scoringOk ? `Scoring: ${scoring.llm_provider}` : `${scoring.llm_provider} needs a key`;
+      }
       $("chips").innerHTML = [
+        chip(scoringOk, scoringLabel),
         chip(data.jev.ok, data.jev.ok ? `JEV ${data.jev.detail}` : "JEV offline"),
         chip(data.canvas.connected, data.canvas.connected ? "Canvas connected" : "Canvas not connected"),
         chip(data.gradescope.connected, data.gradescope.connected ? `Gradescope ${data.gradescope.email}` : "Gradescope not connected")
       ].join("");
       if (data.canvas.base) $("canvas-base").value = data.canvas.base;
+      if (data.jev && data.jev.base) $("jev").value = data.jev.base;
       if (data.gradescope.base) $("gs-base").value = data.gradescope.base;
-      if (data.jev.ok) $("jev").value = $("jev").value || "http://127.0.0.1:8000";
+      if (data.scoring) {
+        $("backend").value = scoring.backend || "semif";
+        $("laya-model").value = scoring.laya_model || "";
+        $("llm-provider").value = scoring.llm_provider || "openai";
+        $("llm-base").value = scoring.llm_base_url || "";
+        $("llm-model").value = scoring.llm_model || "";
+        $("llm-timeout").value = scoring.llm_timeout || 60;
+        showBackendFields();
+        applyLlmNote();
+      }
     }
 
     let teaching = [];
@@ -668,11 +758,19 @@
             canvas_token: $("canvas-token").value,
             gradescope_base: $("gs-base").value,
             gradescope_email: $("gs-email").value,
-            gradescope_password: $("gs-password").value
+            gradescope_password: $("gs-password").value,
+            backend: $("backend").value,
+            laya_model: $("laya-model").value,
+            llm_provider: $("llm-provider").value,
+            llm_base_url: $("llm-base").value,
+            llm_model: $("llm-model").value,
+            llm_api_key: $("llm-key").value,
+            llm_timeout: Number($("llm-timeout").value || 60)
           })
         });
         $("canvas-token").value = "";
         $("gs-password").value = "";
+        $("llm-key").value = "";
         $("connect-note").textContent = "Saved.";
         await refreshStatus();
       } catch (error) {
@@ -819,7 +917,7 @@
 
     $("grade-sample").onclick = async () => {
       $("grade-sample").disabled = true;
-      $("sample-out").textContent = "Scoring on JEV…";
+      $("sample-out").textContent = "Scoring…";
       try {
         const result = await api("/api/grade-text", {
           method: "POST",
@@ -1080,6 +1178,16 @@
       } catch (error) {
         $("desk-error").textContent = error.message;
       }
+    };
+
+    $("backend").onchange = showBackendFields;
+    $("llm-provider").onchange = () => {
+      const preset = LLM_PRESETS[$("llm-provider").value];
+      if (!preset) return;
+      $("llm-base").value = preset.base;
+      $("llm-model").value = preset.model;
+      $("llm-key").value = "";
+      applyLlmNote();
     };
 
     renderCriteria(defaultCriteria());

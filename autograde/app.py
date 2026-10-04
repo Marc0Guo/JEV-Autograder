@@ -16,6 +16,8 @@ from pydantic import BaseModel, Field
 from autograde.canvas_api import CanvasClient, CanvasError
 from autograde.gradescope_api import GradescopeClient, GradescopeError, grades_csv
 from autograde.jev_client import JevClient, JevError
+from autograde.laya_backend import LayaError, LayaGrader
+from autograde.llm_backend import PRESETS, LlmError, LlmGrader, env_api_key
 from autograde.semif_backend import MODEL, REVISION, SemifError, SemifGrader
 
 from autograde.rubric import (
@@ -46,6 +48,14 @@ app.state.config = {
     "canvas_token": "",
     "gradescope_base": "https://www.gradescope.com",
     "jev_base": "http://127.0.0.1:8000",
+    "backend": "semif",
+    "laya_model": "",
+    "laya_device": "",
+    "llm_provider": "openai",
+    "llm_base_url": PRESETS["openai"]["base_url"],
+    "llm_model": PRESETS["openai"]["model"],
+    "llm_timeout": 60,
+    "llm_keys": {},
 }
 
 
@@ -56,6 +66,14 @@ class ConnectBody(BaseModel):
     gradescope_email: str = ""
     gradescope_password: str = ""
     jev_base: str = "http://127.0.0.1:8000"
+    backend: str | None = None
+    laya_model: str | None = None
+    laya_device: str | None = None
+    llm_provider: str | None = None
+    llm_base_url: str | None = None
+    llm_model: str | None = None
+    llm_api_key: str | None = None
+    llm_timeout: float | None = None
 
 
 class GradeTextBody(BaseModel):
@@ -171,15 +189,16 @@ def index() -> FileResponse:
 @app.get("/api/status")
 def status() -> dict[str, Any]:
     cfg = app.state.config
-    jev = {"ok": False, "detail": "not checked"}
+    jev = {"ok": False, "detail": "not checked", "base": cfg.get("jev_base") or ""}
     try:
         health = JevClient(cfg["jev_base"]).health()
-        jev = {"ok": True, "detail": health.get("device") or "up", "model": health.get("model")}
+        jev = {"ok": True, "detail": health.get("device") or "up", "model": health.get("model"), "base": cfg.get("jev_base") or ""}
     except JevError as exc:
-        jev = {"ok": False, "detail": str(exc)}
+        jev = {"ok": False, "detail": str(exc), "base": cfg.get("jev_base") or ""}
     semif = getattr(app.state, "semif", None)
     return {
         "jev": jev,
+        "scoring": _scoring_status(),
         "semif": {
             "model": MODEL,
             "revision": REVISION,
@@ -202,6 +221,7 @@ def status() -> dict[str, Any]:
 @app.post("/api/connect")
 def connect(body: ConnectBody) -> dict[str, Any]:
     cfg = app.state.config
+    _validate_scoring(body)
     if body.jev_base.strip():
         cfg["jev_base"] = body.jev_base.strip().rstrip("/")
     if body.canvas_base.strip():
@@ -230,6 +250,7 @@ def connect(body: ConnectBody) -> dict[str, Any]:
         if old is not None:
             old.close()
         app.state.gradescope = client
+    _apply_scoring(body)
     _save_config()
     return status()
 
@@ -562,6 +583,77 @@ def _materialize(source: str, course_id: str, assignment_id: str, row: dict[str,
     return text
 
 
+def _laya_importable() -> bool:
+    try:
+        import laya  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def _llm_key(provider: str) -> tuple[str, str]:
+    """Return the key and whether it came from the saved file or the environment."""
+    keys = app.state.config.get("llm_keys") or {}
+    saved = str(keys.get(provider) or "").strip() if isinstance(keys, dict) else ""
+    if saved:
+        return saved, "saved"
+    if env_api_key(provider):
+        return env_api_key(provider), "env"
+    return "", "missing"
+
+
+def _scoring_status() -> dict[str, Any]:
+    cfg = app.state.config
+    provider = str(cfg.get("llm_provider") or "openai")
+    preset = PRESETS.get(provider) or PRESETS["openai"]
+    _key, source = _llm_key(provider if provider in PRESETS else "openai")
+    laya = getattr(app.state, "laya", None)
+    return {
+        "backend": cfg.get("backend") or "semif",
+        "laya_model": cfg.get("laya_model") or "",
+        "laya_device": (laya.metadata or {}).get("device") if laya is not None and laya.metadata else (cfg.get("laya_device") or ""),
+        "laya_importable": _laya_importable(),
+        "laya_loaded": bool(laya is not None and laya.loaded),
+        "llm_provider": provider if provider in PRESETS else "openai",
+        "llm_base_url": cfg.get("llm_base_url") or preset["base_url"],
+        "llm_model": cfg.get("llm_model") or preset["model"],
+        "llm_timeout": cfg.get("llm_timeout") or 60,
+        "llm_key_source": source,
+    }
+
+
+def _validate_scoring(body: ConnectBody) -> None:
+    if body.backend is not None and body.backend.strip().lower() not in {"semif", "laya", "llm"}:
+        raise HTTPException(400, "Scoring backend must be semif, laya, or llm")
+    if body.llm_provider is not None and body.llm_provider.strip().lower() not in PRESETS:
+        raise HTTPException(400, "LLM provider must be anthropic, openai, ollama, or lmstudio")
+    if body.llm_timeout is not None and body.llm_timeout <= 0:
+        raise HTTPException(400, "Timeout must be greater than 0")
+
+
+def _apply_scoring(body: ConnectBody) -> None:
+    cfg = app.state.config
+    if body.backend is not None:
+        cfg["backend"] = body.backend.strip().lower()
+    if body.laya_model is not None:
+        cfg["laya_model"] = body.laya_model.strip()
+    if body.laya_device is not None:
+        cfg["laya_device"] = body.laya_device.strip()
+    if body.llm_provider is not None:
+        cfg["llm_provider"] = body.llm_provider.strip().lower()
+    if body.llm_base_url is not None:
+        cfg["llm_base_url"] = body.llm_base_url.strip().rstrip("/")
+    if body.llm_model is not None:
+        cfg["llm_model"] = body.llm_model.strip()
+    if body.llm_timeout is not None:
+        cfg["llm_timeout"] = body.llm_timeout
+    if body.llm_api_key:
+        provider = str(cfg.get("llm_provider") or "openai")
+        keys = dict(cfg.get("llm_keys") or {})
+        keys[provider] = body.llm_api_key.strip()
+        cfg["llm_keys"] = keys
+
+
 def _semif() -> SemifGrader:
     grader = getattr(app.state, "semif", None)
     if grader is None:
@@ -570,11 +662,47 @@ def _semif() -> SemifGrader:
     return grader
 
 
+def _laya() -> LayaGrader:
+    cfg = app.state.config
+    signature = (str(cfg.get("laya_model") or ""), str(cfg.get("laya_device") or ""))
+    grader = getattr(app.state, "laya", None)
+    if grader is None or grader.signature != signature:
+        grader = LayaGrader(model=signature[0], device=signature[1] or None)
+        app.state.laya = grader
+    return grader
+
+
+def _llm() -> LlmGrader:
+    cfg = app.state.config
+    provider = str(cfg.get("llm_provider") or "openai")
+    if provider not in PRESETS:
+        raise LlmError(f"Unknown LLM provider {provider!r}")
+    preset = PRESETS[provider]
+    key, _source = _llm_key(provider)
+    timeout = float(cfg.get("llm_timeout") or 60)
+    return LlmGrader(
+        provider=provider,
+        base_url=str(cfg.get("llm_base_url") or preset["base_url"]),
+        api_key=key,
+        model=str(cfg.get("llm_model") or preset["model"]),
+        timeout=timeout,
+    )
+
+
 def _grade_submission(rubric: Rubric, text: str, assignment_name: str) -> dict[str, Any]:
     state = build_state(rubric, text, assignment_name)
+    request = to_systemone(rubric, state)
+    backend = str(app.state.config.get("backend") or "semif")
     try:
-        payload = _semif().grade(to_systemone(rubric, state))
-    except SemifError as exc:
+        if backend == "semif":
+            payload = _semif().grade(request)
+        elif backend == "laya":
+            payload = _laya().grade(request)
+        elif backend == "llm":
+            payload = _llm().grade(request)
+        else:
+            raise HTTPException(400, f"Unknown scoring backend {backend}")
+    except (SemifError, LayaError, LlmError) as exc:
         raise HTTPException(502, str(exc)) from exc
     result = score_answers(rubric, payload.get("answers") or {})
     return result.model_dump()
