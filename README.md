@@ -11,7 +11,11 @@
   Student work stays on your machine. The model proposes ratings. You decide what is recorded.
 </p>
 
-https://github.com/Marc0Guo/JEV-Autograder/raw/main/videos/jev-autograder/renders/gradejav.mp4
+
+
+https://github.com/user-attachments/assets/9b0e1ca6-589f-4eb7-9fdc-46a293af0943
+
+
 
 [SemIf](https://github.com/TheoLeeCJ/SemIf-OpenJev) (formerly OpenJev) reads each rubric criterion as a typed decision from **Qwen3.5-4B**, on this computer. [MarkItDown](https://github.com/microsoft/markitdown) turns PDF, Word, PowerPoint, and Excel uploads into Markdown before that scoring step. SemIf is an independent project. It is not affiliated with TypeSafe or the hosted Jev service. This app uses SemIf's local readout (`semif-phase1`).
 
