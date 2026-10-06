@@ -1,4 +1,4 @@
-# JEV Autograder
+# GradeJav
 
 <p align="center">
   <a href="https://github.com/TheoLeeCJ/SemIf-OpenJev"><img alt="SemIf-OpenJev" src="https://img.shields.io/badge/scoring-SemIf--OpenJev-111111"></a>
@@ -11,6 +11,8 @@
   学生作业留在本机。AI 提议分数，人来确认后才写入成绩。<br>
   Student work stays on your machine. The model proposes ratings. You decide what is recorded.
 </p>
+
+https://github.com/Marc0Guo/JEV-Autograder/raw/main/videos/jev-autograder/renders/gradejav.mp4
 
 [SemIf](https://github.com/TheoLeeCJ/SemIf-OpenJev) (formerly OpenJev) reads each rubric criterion as a typed decision from **Qwen3.5-4B**, on this computer. [MarkItDown](https://github.com/microsoft/markitdown) turns PDF, Word, PowerPoint, and Excel uploads into Markdown before that scoring step. SemIf is an independent project. It is not affiliated with TypeSafe or the hosted Jev service. This app uses SemIf's local readout (`semif-phase1`).
 
@@ -30,7 +32,7 @@ Canvas and Gradescope remain the systems your institution already uses to hold t
 
 ## Human–AI collaboration
 
-JEV proposes a rating for each rubric row. You see the student's work beside that proposal and you choose what gets recorded.
+GradeJav proposes a rating for each rubric row. You see the student's work beside that proposal and you choose what gets recorded.
 
 1. The model scores the rubric you already use: Full Marks, No Marks, or the other levels on that assignment.
 2. You read the submission and the proposed ratings together.
@@ -39,7 +41,7 @@ JEV proposes a rating for each rubric row. You see the student's work beside tha
 
 ```mermaid
 flowchart LR
-  LMS["Canvas or Gradescope"] --> APP["JEV Autograder :8010"]
+  LMS["Canvas or Gradescope"] --> APP["GradeJav :8010"]
   APP --> MD["MarkItDown"]
   MD --> TEXT["Markdown on this machine"]
   TEXT --> SEMIF["SemIf · Qwen3.5-4B"]
@@ -120,7 +122,7 @@ The Connections panel chooses the scorer. SemIf stays the default.
 
 | Backend | How to use it |
 |---|---|
-| **JEV / SemIf** | Local Qwen3.5-4B through `semif-phase1`. The first grade downloads that checkpoint. |
+| **GradeJav / SemIf** | Local Qwen3.5-4B through `semif-phase1`. The first grade downloads that checkpoint. |
 | **Laya** | [Laya](https://github.com/NandhaKishorM/laya) `2e4d9c87`, the open System One model with the same choice, score, and yes/no questions. `uv sync` installs the package. The first Laya grade downloads the checkpoint the router selects. Leave the checkpoint blank, or set `english`, `multilingual`, or `typed-decisions`. A CUDA or ROCm build of PyTorch is used when `torch.cuda.is_available()` is true; otherwise scoring runs on CPU. |
 | **LLM API** | Anthropic Messages, OpenAI Chat Completions, or any OpenAI-compatible server. Presets fill the base URL for Anthropic (`https://api.anthropic.com`), OpenAI (`https://api.openai.com/v1`), Ollama (`http://127.0.0.1:11434/v1`), and LM Studio (`http://127.0.0.1:1234/v1`). Set the model name the server expects. Anthropic and OpenAI need an API key. Ollama and LM Studio do not, unless that server asks for one. |
 
@@ -128,12 +130,12 @@ API keys are saved in `data/config.json` under `llm_keys`, one slot per provider
 
 ## Canvas extension
 
-The SpeedGrader control sits on the rubric. **Grade with JEV** scores the assignment open on that page, using its Canvas rubric.
+The SpeedGrader control sits on the rubric. **Grade** scores the assignment open on that page, using its Canvas rubric.
 
 1. Keep this app running at http://127.0.0.1:8010.
 2. Open `chrome://extensions`, turn on Developer mode, and load the `extension` folder.
 3. Open that assignment in Canvas SpeedGrader with the rubric visible on the right.
-4. Click **Grade with JEV**. After the score comes back, the extension selects Full Marks, No Marks, or the other rating on each row. Submit the rubric in SpeedGrader to save.
+4. Click **Grade**. After the score comes back, the extension selects Full Marks, No Marks, or the other rating on each row. Submit the rubric in SpeedGrader to save.
 
 ## For agents
 
