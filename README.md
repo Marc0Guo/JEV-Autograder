@@ -8,7 +8,6 @@
 </p>
 
 <p align="center">
-  学生作业留在本机。AI 提议分数，人来确认后才写入成绩。<br>
   Student work stays on your machine. The model proposes ratings. You decide what is recorded.
 </p>
 
